@@ -49,7 +49,7 @@ User ─────► PositionAssignment ─────► Position ───
 - Represents a **functional team** (HR, Finance, Sales, Operations).
 - Supports unlimited depth hierarchy via `parentDepartmentId`.
 - Department can span multiple BusinessUnits via `DepartmentUnitMap`.
-- Department head is a **User** (Core entity) — not Employee (module rule, see §6).
+
 - One `isDefault = true` department per tenant.
 
 ### 2.3 Designation
@@ -233,28 +233,12 @@ findAll() { ... }
 
 | FK Source | FK Target | Layer | Allowed? |
 |-----------|-----------|-------|----------|
-| `Department.departmentHeadId` | `User` | Core → Core | ✅ |
-| `Department.departmentHeadId` | `Employee` | Core → HR Module | ❌ |
+
 | `Task.assigneeUserId` | `User` | Core → Core | ✅ |
 | `Task.assigneeDepartmentId` | `Department` | Core → Core | ✅ |
 | `Employee.userId` | `User` | HR → Core | ✅ |
 | `Employee.managerId` | `Employee` | HR → HR | ✅ |
 | `FieldAttendance.employeeId` | `Employee` | Field → HR | ✅ (Field depends on HR) |
-
-### Resolving the Department Head Dilemma
-
-```
-Business scenario: "Show me the department head's employment details"
-
-Step 1: Load Department.departmentHeadId → User (Core query, always works)
-Step 2: If HR module is active → Load User.employee for employment context
-Step 3: Application layer merges: { user, employee? }
-
-This way, if HR module is not purchased:
-- Step 1 still works ✅
-- Step 2 is skipped ✅
-- Display falls back to user's name from User model ✅
-```
 
 ---
 

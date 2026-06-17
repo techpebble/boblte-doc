@@ -263,14 +263,13 @@
 | id | uuid | PK |
 | tenant_id | uuid | FK → tenants (CASCADE) |
 | department_name | varchar | NOT NULL |
-| department_head_id | uuid? | FK → users (SET NULL) |
+
 | parent_department_id | uuid? | FK → departments (self-ref) |
 | is_default | boolean | DEFAULT false |
 | audit fields | | |
 
 **Indexes**: `UNIQUE (tenant_id, department_name)`, `INDEX (tenant_id)`
 
-> ℹ️ `department_head_id` → `users` (Core rule). App layer resolves `User → Employee` if HR module active.
 
 #### `designations`
 | Column | Type | Constraints |

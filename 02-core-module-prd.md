@@ -103,7 +103,7 @@ Core provides:
 | ORG-01 | Business units support unlimited hierarchy depth via `parentBusinessUnitId` | P0 |
 | ORG-02 | One default business unit per tenant | P0 |
 | ORG-03 | Departments support unlimited hierarchy via `parentDepartmentId` | P0 |
-| ORG-04 | Department head is a `User` (not Employee — Core module rule) | P0 |
+
 | ORG-05 | DepartmentUnitMap links departments to business units (many-to-many) | P0 |
 | ORG-06 | Designations are tenant-specific job titles | P0 |
 | ORG-07 | All org entities support soft delete | P0 |

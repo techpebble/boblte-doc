@@ -243,13 +243,13 @@ Domain entities are grouped by **bounded context** (DDD terminology). Each conte
 | `id` | UUID | Primary key |
 | `tenantId` | UUID | Tenant scope |
 | `departmentName` | String | Unique within tenant |
-| `departmentHeadId` | UUID? | FK → `User` (Core rule — see §6 of Org & AC Design) |
+
 | `parentDepartmentId` | UUID? | Parent in hierarchy |
 | `isDefault` | Boolean | Default department |
 
 **Key Rules**:
 - Supports unlimited hierarchy depth.
-- `departmentHeadId` references `User` (not `Employee`) to maintain Core independence from HR module.
+
 - Department can be mapped to multiple business units via `DepartmentUnitMap`.
 
 ---
@@ -450,7 +450,6 @@ Domain entities are grouped by **bounded context** (DDD terminology). Each conte
 - An Employee with `userId` set is a **system employee** (has login access).
 - An Employee without `userId` is an **offline employee** (e.g., factory worker, no system access).
 - `managerId` enables self-referential hierarchy for org chart.
-- `departmentsHeaded` relation: an Employee can be the head of multiple departments.
 
 ---
 
