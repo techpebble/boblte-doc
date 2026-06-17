@@ -33,9 +33,9 @@
 |------|---------|--------|
 | `base.prisma` | Config | Generator + datasource only |
 | `platform.prisma` | Platform | `tenants`, `platform_users`, `subscription_plans` |
-| `auth.prisma` | IAM | `users`, `roles`, `permissions`, `permission_roles`, `user_roles`, `user_business_unit_scopes`, `refresh_tokens`, `blacklisted_tokens` |
+| `auth.prisma` | IAM | `users`, `roles`, `permissions`, `permission_roles`, `position_roles`, `user_business_unit_scopes`, `refresh_tokens`, `blacklisted_tokens` |
 | `identity.prisma` | Identity | `owner_principals`, `external_principals`, `invitations` |
-| `org.prisma` | Organization | `business_units`, `departments`, `designations`, `department_unit_map` |
+| `org.prisma` | Organization | `business_units`, `departments`, `designations`, `department_unit_map`, `positions`, `position_assignments` |
 | `workflow.prisma` | Workflow | `workflows`, `workflow_steps`, `workflow_instances`, `workflow_step_executions` |
 | `tasks.prisma` | Tasks | `tasks`, `task_comments` |
 | `system.prisma` | System | `audit_logs`, `notifications`, `tenant_settings` |
@@ -154,14 +154,15 @@
 | assigned_by | uuid | FK → users |
 | assigned_at | timestamptz | DEFAULT now() |
 
-#### `user_roles`
+#### `position_roles` *(sole RBAC path — roles assigned to positions)*
 | Column | Type | Constraints |
 |--------|------|-------------|
-| user_id | uuid | PK (composite), FK → users |
-| business_unit_id | uuid | PK (composite), FK → business_units |
-| role_id | uuid | PK (composite), FK → roles |
-| assigned_by | uuid | |
+| position_id | uuid | PK (composite), FK → positions (CASCADE) |
+| role_id | uuid | PK (composite), FK → roles (CASCADE) |
+| assigned_by | uuid | FK → users |
 | assigned_at | timestamptz | DEFAULT now() |
+
+> **Permission resolution**: `User → position_assignments → positions → position_roles → roles → permission_roles → permissions`
 
 #### `user_business_unit_scopes`
 | Column | Type | Constraints |
@@ -288,6 +289,37 @@
 | tenant_id | uuid | FK → tenants |
 | created_at | timestamptz | |
 | created_by | uuid | |
+
+#### `positions`
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | uuid | PK |
+| tenant_id | uuid | FK → tenants (CASCADE) |
+| position_code | varchar | NOT NULL |
+| position_name | varchar | NOT NULL |
+| business_unit_id | uuid? | FK → business_units |
+| department_id | uuid? | FK → departments |
+| parent_position_id | uuid? | FK → positions (self-ref) |
+| position_type | position_type (enum) | NOT NULL |
+| is_vacant | boolean | DEFAULT false |
+| audit fields | | |
+
+**Indexes**: `UNIQUE (tenant_id, position_code)`, `INDEX (tenant_id)`, `INDEX (business_unit_id)`, `INDEX (department_id)`
+
+#### `position_assignments`
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | uuid | PK |
+| tenant_id | uuid | FK → tenants (CASCADE) |
+| position_id | uuid | FK → positions (CASCADE) |
+| user_id | uuid | FK → users (CASCADE) |
+| is_primary | boolean | DEFAULT true |
+| effective_from | timestamptz | NOT NULL |
+| effective_to | timestamptz | NULLABLE |
+| created_at | timestamptz | DEFAULT now() |
+| created_by | uuid | |
+
+**Indexes**: `INDEX (position_id)`, `INDEX (user_id)`, `INDEX (tenant_id)`
 
 ---
 
@@ -481,6 +513,7 @@
 | `tenant_type` | SOLE_PROPRIETORSHIP, PARTNERSHIP, PRIVATE_LIMITED, PUBLIC_LIMITED, LLP, TRUST, NGO |
 | `ownership_type` | SOLE_PROPRIETOR, PARTNER, DIRECTOR, TRUSTEE |
 | `principal_type` | AUDITOR, CONSULTANT, VENDOR |
+| `position_type` | BUSINESS_UNIT_HEAD, DEPARTMENT_HEAD, MANAGER, SUPERVISOR, TEAM_LEAD, EXECUTIVE, STAFF, CUSTOM |
 | `workflow_status` | DRAFT, PUBLISHED, ARCHIVED |
 | `workflow_step_type` | APPROVAL, REVIEW, AUTOMATED, NOTIFICATION |
 | `workflow_instance_status` | PENDING, IN_PROGRESS, COMPLETED, REJECTED, CANCELLED |

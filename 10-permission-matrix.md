@@ -31,6 +31,8 @@ This document defines all platform permissions and maps them to system roles. Te
 | `VIEWER` | true | Read-only across all permitted modules |
 | `EMPLOYEE` | true | Self-service only (profile, my tasks, my notifications) |
 
+> These roles are assigned to **Positions** via `PositionRole`. Users gain permissions by being assigned to a Position, never directly.
+
 ---
 
 ## 3. IAM Module Permissions
@@ -60,6 +62,9 @@ This document defines all platform permissions and maps them to system roles. Te
 | `org:manage_designations` | ✅ | ✅ | ❌ | ❌ | ❌ |
 | `org:view_designations` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `org:manage_dept_unit_map` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `org:manage_positions` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `org:view_positions` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `org:assign_positions` | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -153,6 +158,9 @@ export const PLATFORM_PERMISSIONS = [
   { moduleName: 'org', actionName: 'manage_designations' },
   { moduleName: 'org', actionName: 'view_designations' },
   { moduleName: 'org', actionName: 'manage_dept_unit_map' },
+  { moduleName: 'org', actionName: 'manage_positions' },
+  { moduleName: 'org', actionName: 'view_positions' },
+  { moduleName: 'org', actionName: 'assign_positions' },
 
   // WORKFLOW
   { moduleName: 'workflow', actionName: 'manage_workflows' },
@@ -200,6 +208,9 @@ export const PLATFORM_PERMISSIONS = [
 ## 11. System Role → Permission Seed Mapping
 
 ```typescript
+// roles.seed.ts
+// Roles are assigned to POSITIONS via PositionRole, not directly to users.
+// On tenant creation, a root 'Company Owner' position is seeded and TENANT_OWNER role is assigned to it.
 export const SYSTEM_ROLE_PERMISSIONS = {
   TENANT_OWNER: '*',  // All permissions
 
@@ -213,8 +224,9 @@ export const SYSTEM_ROLE_PERMISSIONS = {
 
   DEPT_MANAGER: [
     'iam:view_roles', 'org:view_business_units', 'org:view_departments',
-    'org:view_designations', 'workflow:execute_steps', 'workflow:view_workflows',
-    'workflow:view_instances', 'tasks:create', 'tasks:view_own', 'tasks:view_all',
+    'org:view_designations', 'org:view_positions',
+    'workflow:execute_steps', 'workflow:view_workflows', 'workflow:view_instances',
+    'tasks:create', 'tasks:view_own', 'tasks:view_all',
     'tasks:edit', 'tasks:assign', 'tasks:change_status', 'tasks:comment',
     'hr:view_employees', 'hr:view_org_chart', 'system:view_notifications',
     'field:view_team', 'field:view_live_map',
@@ -223,15 +235,15 @@ export const SYSTEM_ROLE_PERMISSIONS = {
   VIEWER: [
     'iam:view_users', 'iam:view_roles', 'iam:view_external_principals',
     'org:view_business_units', 'org:view_departments', 'org:view_designations',
-    'workflow:view_workflows', 'workflow:view_instances', 'tasks:view_all',
-    'tasks:view_own', 'hr:view_employees', 'hr:view_org_chart',
+    'org:view_positions', 'workflow:view_workflows', 'workflow:view_instances',
+    'tasks:view_all', 'tasks:view_own', 'hr:view_employees', 'hr:view_org_chart',
     'system:view_settings', 'system:view_notifications',
     'field:view_own', 'field:view_team',
   ],
 
   EMPLOYEE: [
     'org:view_business_units', 'org:view_departments', 'org:view_designations',
-    'tasks:view_own', 'tasks:change_status', 'tasks:comment',
+    'org:view_positions', 'tasks:view_own', 'tasks:change_status', 'tasks:comment',
     'workflow:execute_steps', 'workflow:view_instances',
     'hr:view_org_chart', 'system:view_notifications',
     'field:check_in', 'field:log_visit', 'field:submit_dwr', 'field:view_own',
@@ -243,26 +255,29 @@ export const SYSTEM_ROLE_PERMISSIONS = {
 
 ## 12. User Type vs Access Capability
 
-| User Type | Can Log In | Has System Role | Module Access |
-|-----------|-----------|----------------|---------------|
-| `OWNER` | ✅ | TENANT_OWNER | All |
-| `EMPLOYEE` | ✅ | EMPLOYEE (default) | Based on assigned roles |
-| `EXTERNAL` | ✅ | VIEWER (default) | Based on `accessEndDate` + assigned roles |
-| `SYSTEM` | ❌ | None | API key-based, service calls only |
+| User Type | Can Log In | Position Required | Module Access |
+|-----------|-----------|-----------------|---------------|
+| `OWNER` | ✅ | Auto-seeded ("Company Owner" position at tenant creation) | All |
+| `EMPLOYEE` | ✅ | Yes — assigned by admin | Based on position's roles |
+| `EXTERNAL` | ✅ | Yes — e.g., "External Auditor" position with `effectiveTo` | Based on position's roles |
+| `SYSTEM` | ❌ | None — API key based, no JWT role resolution | API key-based, service calls only |
 
 ---
 
 ## 13. Context-Aware Permissions
 
-Permissions are evaluated within the **active BusinessUnit context**. Switching context changes the effective role:
+Permissions are scoped to the Position's `businessUnitId`. A user with two positions in different BUs gets different permissions per context:
 
 ```
 User: Ravi Kumar
-  → Mumbai Branch context: role = DEPT_MANAGER → full task + HR view for Mumbai
-  → Delhi Branch context:  role = VIEWER       → read-only across Delhi
+  Position 1: "Finance Manager — Mumbai" (isPrimary: true)
+    → Context: Mumbai Branch → Roles: DEPT_MANAGER → full finance + task view for Mumbai
+
+  Position 2: "Viewer — Delhi" (isPrimary: false)
+    → Context: Delhi Branch → Roles: VIEWER → read-only across Delhi
 ```
 
-API enforces context via the `businessUnitId` claim in the JWT. Users call `POST /context/switch` to change context, which issues a new access token.
+Context switching is driven by `PositionAssignment.position.businessUnitId`. Users call `POST /context/switch` with the target `businessUnitId`, which issues a new access token scoped to that BU's positions.
 
 ---
 

@@ -25,14 +25,15 @@ Domain entities are grouped by **bounded context** (DDD terminology). Each conte
                           │ Tenant (root)
 ┌─────────────────────────▼─────────────────────────────────── ┐
 │  IDENTITY & ACCESS CONTEXT                                   │
-│  User · Role · Permission · UserRole · PermissionRole        │
+│  User · Role · Permission · PositionRole · PermissionRole    │
 │  UserBusinessUnitScope · RefreshToken · BlacklistedToken     │
 │  OwnerPrincipal · ExternalPrincipal · Invitation             │
 └─────────────────────────────────────────────────────────────┘
                           │
 ┌─────────────────────────▼──────────────────────────────────┐
 │  ORGANIZATION CONTEXT                                       │
-│  BusinessUnit · Department · Designation · DepartmentUnitMap │
+│  BusinessUnit · Department · Designation · DepartmentUnitMap│
+│  Position · PositionAssignment                              │
 └──────────────────────────────────────────────────────────────┘
                           │
         ┌─────────────────┴──────────────────┐
@@ -183,7 +184,7 @@ Domain entities are grouped by **bounded context** (DDD terminology). Each conte
 **Key Rules**:
 - `roleName` is unique per tenant.
 - System roles (`isSystemRole = true`) are seeded at tenant creation and cannot be deleted.
-- Roles are assigned to users per business unit context (via `UserRole`).
+- Roles are assigned to **Positions** via `PositionRole` — never directly to users.
 
 ---
 
@@ -266,6 +267,63 @@ Domain entities are grouped by **bounded context** (DDD terminology). Each conte
 | `tenantId` | UUID | Tenant scope |
 | `designationName` | String | e.g., "Senior Engineer", "Branch Manager" |
 | `description` | String? | Optional description |
+
+---
+
+### 3.10 Position
+
+**Context**: Organization
+**Schema File**: `org.prisma`
+
+> A named structural slot in the organization hierarchy. The **RBAC pivot point** — roles are assigned to positions, and users fill positions.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Primary key |
+| `tenantId` | UUID | Tenant scope |
+| `positionCode` | String | Unique per tenant (e.g., `FIN-HEAD-MUM`) |
+| `positionName` | String | Display name (e.g., "Head of Finance — Mumbai") |
+| `businessUnitId` | UUID? | FK → BusinessUnit (where this position is located) |
+| `departmentId` | UUID? | FK → Department (functional team) |
+| `parentPositionId` | UUID? | FK → Position (self-referential hierarchy) |
+| `positionType` | Enum | BUSINESS_UNIT_HEAD, DEPARTMENT_HEAD, MANAGER, SUPERVISOR, TEAM_LEAD, EXECUTIVE, STAFF, CUSTOM |
+| `isVacant` | Boolean | true = position exists but no current holder |
+
+**Key Rules**:
+- `positionCode` is unique per tenant.
+- A Position exists independently of the person filling it — if the holder leaves, `isVacant = true`.
+- Supports unlimited depth via `parentPositionId` (e.g., Regional Head → Area Head → Executive).
+- Deleting the person's assignment doesn't delete the Position.
+
+**Relationships**:
+- Has many: `PositionAssignment` (users holding this position), `PositionRole` (roles granted by this position)
+- Belongs to: `Tenant`, `BusinessUnit?`, `Department?`, `Position?` (parent)
+
+---
+
+### 3.11 PositionAssignment
+
+**Context**: Organization
+**Schema File**: `org.prisma`
+
+> Links a User to a Position for a defined time period. The mechanism by which a user gains the permissions of a position.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Primary key |
+| `tenantId` | UUID | Tenant scope |
+| `positionId` | UUID | FK → Position |
+| `userId` | UUID | FK → User |
+| `isPrimary` | Boolean | true = this is the user's main position (for context) |
+| `effectiveFrom` | DateTime | When the assignment starts |
+| `effectiveTo` | DateTime? | When it ends (null = indefinite) |
+| `createdAt/By` | | Audit trail |
+
+**Key Rules**:
+- A user can hold multiple positions (e.g., acting coverage, dual roles).
+- Only one position per user should have `isPrimary = true` at any time.
+- An expired assignment (`effectiveTo` < now) grants no permissions.
+- When a position becomes vacant, all its assignments should be ended (`effectiveTo = now`).
 
 ---
 
@@ -401,23 +459,25 @@ Domain entities are grouped by **bounded context** (DDD terminology). Each conte
 ```
 PlatformUser ──creates──► Tenant ──has──► SubscriptionPlan
                 │
-                └──has──► User ──────────────────────────────┐
-                           │                                  │
-                      userType                          (optional)
-                 OWNER / EMPLOYEE / EXTERNAL / SYSTEM        │
-                           │                                  │
-               ┌───────────┼──────────────┐                  │
-               ▼           ▼              ▼                   ▼
-         OwnerPrincipal  ExternalPrincipal  Employee (HR)  UserRole
-                                               │              │
-                                          managerId       BusinessUnit
-                                          (self-ref)          │
-                                               │           Role ──► PermissionRole ──► Permission
-               BusinessUnit ◄─── Employee ─── Department
-                    │                              │
-               UserRole                      DepartmentHead (→ User)
-                    │
-              DepartmentUnitMap ───► Department
+                └──has──► User ──────────────────────────┐
+                           │                              │
+                      userType                     (optional)
+                 OWNER/EMPLOYEE/EXTERNAL/SYSTEM          │
+                           │                              │
+               ┌───────────┼──────────────┐              │
+               ▼           ▼              ▼               ▼
+         OwnerPrincipal ExternalPrincipal Employee(HR)
+                                              │
+                                         managerId
+                                         (self-ref)
+
+         User ──► PositionAssignment ──► Position ──► PositionRole ──► Role ──► Permission
+                                              │
+                            ┌─────────────────┼────────────────┐
+                            ▼                 ▼                ▼
+                      BusinessUnit       Department      parentPosition
+                            │
+                    DepartmentUnitMap ───► Department
 
 
 Task ──► User (assignee, Core)

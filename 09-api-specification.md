@@ -217,10 +217,31 @@ POST /auth/login
 
 | Method | Endpoint | Permission | Description |
 |--------|----------|-----------|-------------|
-| GET | `/designations` | `org:view_departments` | List designations |
+| GET | `/designations` | `org:view_designations` | List designations |
 | POST | `/designations` | `org:manage_designations` | Create designation |
 | PATCH | `/designations/:id` | `org:manage_designations` | Update |
 | DELETE | `/designations/:id` | `org:manage_designations` | Soft delete |
+
+---
+
+## 5.4 Positions
+
+| Method | Endpoint | Permission | Description |
+|--------|----------|-----------|-------------|
+| GET | `/positions` | `org:view_positions` | List positions |
+| POST | `/positions` | `org:manage_positions` | Create position |
+| GET | `/positions/:id` | `org:view_positions` | Get position detail |
+| PATCH | `/positions/:id` | `org:manage_positions` | Update position |
+| DELETE | `/positions/:id` | `org:manage_positions` | Soft delete position |
+| GET | `/positions/tree` | `org:view_positions` | Full position hierarchy tree |
+| GET | `/positions/:id/assignments` | `org:view_positions` | List users assigned to position |
+| POST | `/positions/:id/assignments` | `org:manage_positions` | Assign user to position |
+| PATCH | `/positions/:id/assignments/:aid` | `org:manage_positions` | Update assignment (dates, isPrimary) |
+| DELETE | `/positions/:id/assignments/:aid` | `org:manage_positions` | End assignment (set effectiveTo) |
+| GET | `/positions/:id/roles` | `org:view_positions` | List roles assigned to position |
+| POST | `/positions/:id/roles` | `org:manage_positions` | Assign role to position |
+| DELETE | `/positions/:id/roles/:roleId` | `org:manage_positions` | Remove role from position |
+| GET | `/users/:id/positions` | `org:view_positions` | Get all positions of a user |
 
 ---
 

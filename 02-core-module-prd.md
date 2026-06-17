@@ -94,7 +94,7 @@ Core provides:
 | RBAC-05 | A user can have multiple roles across multiple business units | P0 |
 | RBAC-06 | UserBusinessUnitScope tracks which business units a user can switch between | P0 |
 | RBAC-07 | One business unit is flagged as `isDefaultContext` per user | P0 |
-| RBAC-08 | Permission check resolves: User → UserRole (in BU context) → Role → PermissionRole → Permission | P0 |
+| RBAC-08 | Permission check resolves: User → PositionAssignment → Position → PositionRole → Role → PermissionRole → Permission | P0 |
 
 ### 4.4 Organization Structure
 

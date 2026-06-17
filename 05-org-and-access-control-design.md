@@ -31,6 +31,12 @@ Tenant
         └── Department (nested — "Accounts Payable", "Recruitment")
 
 Department ◄──────────► BusinessUnit  (many-to-many via DepartmentUnitMap)
+
+Position (anchored to BusinessUnit + Department)
+  └── Position (nested — "Regional Manager" → "Area Manager" → "Sales Executive")
+        └── ...
+
+User ─────► PositionAssignment ─────► Position ─────► PositionRole ─────► Role ─────► Permission
 ```
 
 ### 2.1 BusinessUnit
@@ -54,6 +60,34 @@ Department ◄──────────► BusinessUnit  (many-to-many via 
 ### 2.4 DepartmentUnitMap
 - Junction table linking `Department` ↔ `BusinessUnit`.
 - A Sales department can exist across Mumbai, Delhi, and Bengaluru business units.
+
+### 2.5 Position
+- A **named role-slot** in the organizational hierarchy (e.g., "Head of Finance - Mumbai", "Regional Sales Manager").
+- Bridges Org Structure and RBAC: **Roles are assigned to Positions, not directly to Users**.
+- A Position belongs to one `BusinessUnit` and/or one `Department`.
+- Supports unlimited hierarchy depth via `parentPositionId`.
+- `isVacant = true` means the position exists but currently has no active holder.
+- `positionCode` is unique per tenant (e.g., `FIN-HEAD-MUM`).
+
+**PositionType Values**:
+
+| Type | Description |
+|------|-------------|
+| `BUSINESS_UNIT_HEAD` | Head of a business unit (e.g., Branch Head) |
+| `DEPARTMENT_HEAD` | Head of a department (e.g., Finance Head) |
+| `MANAGER` | Generic manager role |
+| `SUPERVISOR` | Supervisory role above staff |
+| `TEAM_LEAD` | Technical/functional team lead |
+| `EXECUTIVE` | Senior individual contributor |
+| `STAFF` | General staff member |
+| `CUSTOM` | Tenant-defined custom type |
+
+### 2.6 PositionAssignment
+- Links a `User` to a `Position` for a defined time period (`effectiveFrom` / `effectiveTo`).
+- `isPrimary = true` marks the user's main position (for context switching).
+- A user can hold multiple positions simultaneously (e.g., interim coverage).
+- `effectiveTo = null` means currently active with no end date.
+- When `effectiveTo` is set to a past date, the assignment is considered expired.
 
 ---
 
@@ -95,43 +129,51 @@ TenantAdmin sends invite → Invitation record created (token + expiry)
 
 ## 4. Role-Based Access Control (RBAC)
 
-### 4.1 Core Concepts
+### 4.1 Core Concepts — Position-Based RBAC
+
+With the Position module, the RBAC chain is:
 
 ```
-User ──► UserRole ──► Role ──► PermissionRole ──► Permission
-           │
-           └── BusinessUnit (role scope)
+User ──► PositionAssignment ──► Position ──► PositionRole ──► Role ──► PermissionRole ──► Permission
 ```
 
-- A **Permission** is a platform-defined capability: `module_name:action_name` (e.g., `tasks:create`)
-- A **Role** is a tenant-defined collection of permissions (e.g., "Department Manager")
-- A **UserRole** assigns a Role to a User within a specific BusinessUnit context
-- A **User** can have multiple roles across multiple business units
+- A **Permission** is a platform-defined capability: `module_name:action_name`
+- A **Role** is a tenant-defined collection of permissions (e.g., "Finance Manager")
+- A **PositionRole** assigns one or more Roles to a Position (e.g., Finance Head position → Finance Manager role + Audit Viewer role)
+- A **Position** is a slot in the org structure (e.g., "Head of Finance — Mumbai")
+- A **PositionAssignment** assigns a User to a Position for a time period
 
-### 4.2 Business Unit Scoping
+All permissions flow exclusively through the Position chain. There is no direct user→role assignment.
 
-Roles are always scoped to a BusinessUnit. This means:
+### 4.2 Business Unit Scoping via Position
 
-- User A can be `DEPT_MANAGER` in "Mumbai Branch" but only `VIEWER` in "Delhi Branch"
-- When User A switches context to Delhi Branch, their permissions change automatically
-- `UserBusinessUnitScope` tracks which business units a user is authorized to access
-- `isDefaultContext = true` marks the primary business unit for login
+A Position is anchored to a `BusinessUnit` and/or `Department`, so permissions are implicitly scoped:
 
-### 4.3 Permission Resolution
+- "Head of Finance — Mumbai Branch" position → Finance Manager role → `Finance Manager` permissions, scoped to Mumbai Branch
+- Assigning a user to that position grants those permissions in the Mumbai context automatically
+- `UserBusinessUnitScope` still tracks which contexts a user can switch between (driven by their active positions)
+- `isDefaultContext` marks the primary business unit for login (derived from `PositionAssignment.isPrimary`)
+
+### 4.3 Dual RBAC Path
+
+| Path | When Used | Models |
+|------|-----------|--------|
+| **Position-based** (only path) | All users — OWNER, EMPLOYEE, EXTERNAL | `PositionAssignment → Position → PositionRole → Role` |
+
+### 4.4 Permission Resolution
 
 ```
 Request arrives with JWT (userId, tenantId, businessUnitId)
   ↓
-Load UserRoles WHERE userId = ? AND businessUnitId = ?
+Load active PositionAssignments
+  WHERE userId = ? AND (effectiveTo IS NULL OR effectiveTo > now())
+  → For each Position → Load PositionRoles → collect Role IDs
+  → For each Role → Load PermissionRoles → collect Permission actionNames
   ↓
-For each role → Load PermissionRoles → collect all Permission.actionName
-  ↓
-Check if required permission is in the set
-  ↓
-Allow / Deny
+Check if required permission is in the set → Allow / Deny
 ```
 
-### 4.4 System Roles (Seeded)
+### 4.5 System Roles (Seeded)
 
 | Role | isSystemRole | Permissions |
 |------|-------------|-------------|
