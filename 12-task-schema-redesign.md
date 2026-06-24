@@ -12,7 +12,7 @@
 
 This document describes the redesign of the Task module database schema to support:
 
-1. **Multi-assignment** — Tasks can be assigned to multiple users and/or positions simultaneously
+1. **Single Assignment** — A task can be assigned to exactly one user or one position at a time
 2. **Position-based assignment** — Assign to a department head, unit head, manager, etc. via the Position model
 3. **Reassignment with audit trail** — Full history of all task changes via `TaskActivityLog`
 4. **Collaboration & visibility** — Contributors, reviewers, and auto-added watchers (dept heads) in a single `TaskCollaborator` model
@@ -30,7 +30,7 @@ This supersedes the original inline assignee design in `08-database-design.md` �
 ```mermaid
 erDiagram
     Task ||--o| Task : "parent / sub-tasks"
-    Task ||--o{ TaskAssignment : "assigned to"
+    Task ||--o{ TaskAssignment : "assignment history (1 active)"
     Task ||--o{ TaskCollaborator : "collaborators + watchers"
     Task ||--o{ TaskActivityLog : "audit trail"
     Task ||--o{ TaskComment : "comments"
